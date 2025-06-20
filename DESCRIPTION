@@ -1,0 +1,18 @@
+Package: mrPStrata
+Type: Package
+Title: Multiply robust estimation in causal survival analysis with treatment noncompliance
+Version: 0.1.0
+Author: To be updated
+Maintainer: Chao Cheng <c.cheng@yale.edu>
+Description: This package provides functions to calculate the multiply robust estimator of the principal survival causal effect among the always takers, compliers, and never takers.
+License: GPL (>= 2)
+Encoding: UTF-8
+LazyData: true
+Depends: survival, dplyr, boot, ggplot2, progress
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.1
+VignetteBuilder: knitr

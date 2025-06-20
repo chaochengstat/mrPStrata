@@ -1,0 +1,216 @@
+---
+title: "Multiply robust estimation in causal survival analysis with treatment noncompliance"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Multiply robust estimation in causal survival analysis with treatment noncompliance}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+This vignette demonstrates the use of the R package `mrPStrata` to assess principal survival causal effects using the multiply robust estimator that developed in [Cheng et al (2023)](https://arxiv.org/abs/2305.13443). The `mrPStrata` package is available at [https://github.com/chaochengstat/mrPStrata](https://github.com/chaochengstat/mrPStrata) and can be installed as follows
+```{r, eval = FALSE}
+devtools::install_github("chaochengstat/mrPStrata")
+```
+
+## Definition: Principal Survival Causal Effect
+
+Let $X$ denote a vector of baseline covariates, $Z\in{0,1}$ denote the treatment assignment status (1, treated; 0, control), $S\in{0,1}$ denote the actual treatment receipt status, and $T$ denote a failure outcome of interest. Usually, $T$ is partially observed due to right censoring at time $C$, and we only observe $\{U,\delta\}$ instead of $U$, where $U=\{T,C\}$ is the observed failure time and $\delta=\mathbb{I}(T\leq C)$ is a censoring indicator. Let $T(z)$ and $S(z)$ be the potential values of $T$ and $S$, respectively, under treatment assignment status $Z=z$. We can define four principal strata based on the joint potential values of $S$, denoted by $G=(S(1),S(0))$:
+
+| Principal Stratum ($G$) | group name | abbreviation |
+|:-------------:|:-------------:|:-------------:|
+| $(1,1)$      | always takers | a |
+| $(1,0)$     | compliers     | c |
+| $(0,0)$ | never takers      | n |
+| $(0,1)$ | defiers      | d |
+
+We assume standard monotonicity to rule out the defiers stratum. For a given principal strata $g\in\{a,c,n\}$, we aim to estimate the following principal survival causal effect (PSCE):
+$$
+\text{PSCE}_g(u) =\mathbb{P}(T(1)\geq u|g) - \mathbb{P}(T(0)\geq u|g) =: \mathcal S_{1,g}(u) - \mathcal S_{0,g}(u)
+$$
+where $\mathcal S_{z,g}(u)$ is the counterfactual survival probability of the outcome at a given time $u$ under treatment assignment $Z=z$, within principal stratum $g$. In this package, we shall follow the results in [Cheng et al (2023)](https://arxiv.org/abs/2305.13443), which leverage the principal ignorability assumption along with the monotonicity to identify PSCE.
+
+## Multiply robust estimation
+
+In [Cheng et al (2023)](https://arxiv.org/abs/2305.13443), we develop a multiply robust estimator of the principal survival causal effects:
+$$
+\widehat{\text{PSCE}}_g^{\text{mr}}(u) = \widehat{\mathcal S}_{1,g}^{\text{mr}}(u) - \widehat{\mathcal S}_{0,g}^{\text{mr}}(u)
+$$
+We specify the following parametric models for the four nuisance functions $\mathbb{P}(Z=1|X)$, $\mathbb{P}(S=1|Z,X)$, $\mathbb{P}(C\geq t|Z,S,X)$, and $\mathbb{P}(T\geq t|Z,S,X)$:
+
+| Index | Nuisance function | name | parametric model |
+|:-------:|:-------------:|:-------------:|:-------------:|
+| 1 | $\mathbb{P}(Z=1|X)$      | propensity score | logistic regression |
+| 2 | $\mathbb{P}(S=1|Z,X)$     | principal score | logistic regression     | 
+| 3 | $\mathbb{P}(C\geq t|Z,S,X)$ | conditional survival function of the censoring time | Cox proportional hazard model     |
+| 4 | $\mathbb{P}(T\geq t|Z,S,X)$ | conditional survival function of the failure time | Cox proportional hazard model       |
+
+It should be noted that, in the principal score model, we fit two logistic regressions adjusting for $X$, conditioned on subsamples with $Z=1$ and $Z=0$, respectively. Similarly, for the  conditional survival functions of censoring time and failure time, we fit four Cox models adjusting for $X$, conditioned on subsamples with $(Z,S) \in \{(1,1),(1,0),(0,1),(0,0)\}$, respectively. 
+
+The multiply robust estimator is consistent under three types of misspecifications of the parametric models. Specifically, we show $\widehat{\mathcal S}_{z,g}^{\text{mr}}(u)$ (and $\widehat{\text{PSCE}}_g^{\text{mr}}(u)$) is consistent under either one of the following three scenarios regarding correct ($\checkmark$) specification of parametric working models:
+
+| Nuisance model | Scenario 1 |Scenario 2 |Scenario 3 
+|:-------:|:-------------:|:-------------:|:-------------:|
+| $\mathbb{P}(Z=1|X)$      | $\checkmark$ | $\checkmark$ |    |
+| $\mathbb{P}(S=1|Z,X)$     |  $\checkmark$ |  | $\checkmark$ | 
+| $\mathbb{P}(C\geq t|Z,S,X)$ | $\checkmark$ |  |  | 
+| $\mathbb{P}(T\geq t|Z,S,X)$ |          | $\checkmark$ | $\checkmark$ | 
+
+
+## Basic Syntax
+
+The data-fitting function is `mrPStrata`:
+
+`mrPStrata(times,data,Xpi_names,Xe_names,Xc_names,Xt_names,Z_name,S_name,U_name,delta_name,B)`
+
+We require input the following arguments:
+
+* `times`: a vector of time when the principal survival causal effects (PSCEs) are of interest
+* `data`: the dataset
+* `Xpi_names`: names of the covariates for the propensity score model $\mathbb{P}(Z=1|X)$
+* `Xe_name`: names of the covariates for the principal score model  $\mathbb{P}(S=1|Z,X)$ 
+* `Xc_names`: names of the covariates for the censoring model $\mathbb{P}(C\geq t|Z,S,X)$
+* `Xt_names`: names of the covariates for the outcome model $\mathbb{P}(T\geq t|Z,S,X)$
+* `Z_name`: treatment assignment
+* `S_name`: treatment received status
+* `U_name`: observed failure time
+* `delta_name`: censoring time
+* `B`: number of iterations for the bootstrap confidence interval (default: 100)
+
+The output of `mrPStrata` includes the point estimate and 95% confidence interval for $\{\text{PSCE}_g(u),\mathcal S_{z,g}(u)\}$ for all $z\in\{0,1\}$ and $g\in\{a,c,n\}$. Let `res` denote an output from `mrPStrata()`, then one can check the PSCE among the alway takers startum (and its corresponding counterfactual survival probabilities) by running
+
+`print(res$Always_Takers)`
+
+Similarly, one can check the compliers and never takers strata by running `print(res$Compliers)` and `print(res$Never_Takers)`, respectively. In this package, we also build the `plot.psce` function to visualize the results, where one can simply run `plot.psce(res)` to have a direct comparison for the principal causal effect across different strata. 
+
+## An Illustrative Example
+
+Please library the `mrPStrata` package if needed.
+```{r import, message=FALSE, warning=FALSE}
+library("mrPStrata")
+```
+
+#### Data illustration
+
+In this example, we shall use a simulated dataset with $n=2000$ observations.
+
+```{r}
+attach(sim_data)
+head(sim_data)
+```
+In the `sim_data` dataset, we include five baseline covariates `X1`, `X2`, `X3`, `X4` and `X5`, the treatment assignment status `z`, the treatment received status `s`, the observed failure time `U`, and the censoring indicator `delta`
+
+#### Implement the multiply robust estimators
+
+Below we obtain the multiply robust estimator of the PSCEs at time points $u=\{1,2,3,4,5,6,7,8\}$. For illustrative purposes, we set `B=50` for 50 bootstrap replications.
+```{r}
+res = mrPStrata(times=c(1,2,3,4,5,6,7,8),
+                data = sim_data,
+                Xpi_names = c("X1","X2","X3","X4","X5"),
+                Xe_names = c("X1","X2","X3","X4","X5"),
+                Xc_names = c("X1","X2","X3","X4","X5"),
+                Xt_names = c("X1","X2","X3","X4","X5"),
+                Z_name = "z",
+                S_name = "s",
+                U_name ="U",
+                delta_name = "delta",
+                B=50)
+```
+
+Below, one can extract the results among the compliers stratum by running
+```{r}
+print(res$Compliers)
+```
+Similarly, one can try `print(res$Always_Takers)` and `print(res$Never_Takers)` to find the results among other strata.
+
+#### Visualize the results
+
+One can run the followng code to visualize the principal survival causal effects across the three principal strata:
+```{r, out.width="90%",dpi=300,fig.width=10, fig.height=7}
+plot.psce(res)
+```
+
+
+## Sensitivity analysis
+
+The analysis of the PSCE relies on two critical assumptions (i) principal ignorability and (ii) monotonicity, where (i) assumes sufficient covariates being collected so that there are no unmeasured confounding between the participants' compliance behavior and their outcome, and (ii) rules out the defiers stratum. In [Cheng et al (2023)](https://arxiv.org/abs/2305.13443), we develop a sensitivity analysis framework to evaluate robustness of the PSCE estimation when either assumption (i) or (ii) is violated. Specificially, we develop bias-corrected multiply robust estimator that leverages sensitivity parameters to correct the bias due to departure of the assumption. 
+
+#### Sensitivity analysis for the principal ignorability
+
+Under violation of principal ignorability, the bias-corrected estimator is referred to as 
+$\widehat{\text{PSCE}}_g^{\text{mr-pi}}(u) = \widehat{\mathcal S}_{1,g}^{\text{mr-pi}}(u) - \widehat{\mathcal S}_{0,g}^{\text{mr-pi}}(u)$, which depends on four sensitivity parameters $\{\xi_1,\xi_0,\eta_1,\eta_0\}$ embedded in two sensitivity functions:
+\begin{align*}
+\epsilon_1(t,X) & := \frac{\mathbb{P}(T(1)\geq t|G=c,X)}{\mathbb{P}(T(1)\geq t|G=a,X)}= \exp\left[\xi_1\times \left(\frac{t}{t_{\text{max}}}\right)^{\eta_1}\right], \\
+\epsilon_0(t,X) & := \frac{\mathbb{P}(T(0)\geq t|G=c,X)}{\mathbb{P}(T(0)\geq t|G=n,X)}= \exp\left[\xi_0\times \left(\frac{t}{t_{\text{max}}}\right)^{\eta_0}\right],
+\end{align*}
+where $t_{\text{max}}$ is maximum time that the PSCEs are of interest (i.e., the largest value in the `times` argument).
+
+To obtain $\widehat{\text{PSCE}}_g^{\text{mr-pi}}(u)$, we can use the `mrPStrata_PI_SA` function:
+
+`mrPStrata_PI_SA(times,data,Xpi_names,Xe_names,Xc_names,Xt_names,Z_name,S_name,U_name,delta_name,xi_0,xi_1,eta0,eta1,B)`
+
+The arguments used in `mrPStrata_PI_SA` is analogous to these in `mrPStrata`, where the only difference is that `mrPStrata_PI_SA` allows us to specify the values of $\xi_0$, $\xi_1$, $\eta_0$, $\eta_1$ in the arguments `xi0`, `xi1`, `eta0`, and `eta1`, respectively. After obtaining the estimation, one can still use `print(res$Always_Takers)`, `print(res$Compliers)`, and `print(res$Never_Takers)` to print the results, and use `plot.psce(res)` to visualize the results.
+
+Below is an illustrative example with the simulated dataset `sim_data`. Assuming $\xi_0=0.05$, $\xi_1=0.05$, $\eta_0=1$, $\eta_1=1$, the bias-corrected estimation of PSCEs is
+```{r}
+res = mrPStrata_PI_SA(times=c(1,2,3,4,5,6,7,8),
+                      data = sim_data,
+                      Xpi_names = c("X1","X2","X3","X4","X5"),
+                      Xe_names = c("X1","X2","X3","X4","X5"),
+                      Xc_names = c("X1","X2","X3","X4","X5"),
+                      Xt_names = c("X1","X2","X3","X4","X5"),
+                      Z_name = "z",
+                      S_name = "s",
+                      U_name ="U",
+                      delta_name = "delta",
+                      xi0 = 0.05,
+                      xi1 = 0.05,
+                      eta0=1,
+                      eta1=1,
+                      B=50)
+```
+The plot of the bias-corrected PSCE estimation is
+```{r, out.width="90%",dpi=300,fig.width=10, fig.height=7}
+plot.psce(res)
+```
+
+#### Sensitivity analysis for the monotonicity
+
+Defiers exist when monotonicity is violated. Under depature from monotinicity, the bias-corrected estimator is referred to as $\widehat{\text{PSCE}}_g^{\text{mr-mo}}(u) = \widehat{\mathcal S}_{1,g}^{\text{mr-mo}}(u) - \widehat{\mathcal S}_{0,g}^{\text{mr-mo}}(u)$, which depend on the sensitivity parameter $\zeta$, which quantifies the degree of depature from the monotinicity assumption
+$$
+\zeta :=\frac{\mathbb{P}(G=d|X)}{\mathbb{P}(G=c|X)} 
+$$
+To obtain $\widehat{\text{PSCE}}_g^{\text{mr-mo}}(u)$, we can use the `mrPStrata_MO_SA` function:
+
+`mrPStrata_MO_SA(times,data,Xpi_names,Xe_names,Xc_names,Xt_names,Z_name,S_name,U_name,delta_name,zeta,B)`
+
+The arguments used in `mrPStrata_MO_SA` is analogous to these in `mrPStrata`, where the only difference is that `mrPStrata_MO_SA` allows us to specify the values of $\zeta$ in the argument `zeta`. After obtaining the estimation, one can still use `print(res$Always_Takers)`, `print(res$Compliers)`, `print(res$Never_Takers)`, and `print(res$Defiers)` to print out the results, and use `plot.psce(res)` to visualize the results.
+
+Below is an illustrative example with the simulated dataset `sim_data`. Assuming $\zeta=0.02$, the bias-corrected estimation of PSCEs is
+```{r}
+res = mrPStrata_MO_SA(times=c(1,2,3,4,5,6,7,8),
+                      data = sim_data,
+                      Xpi_names = c("X1","X2","X3","X4","X5"),
+                      Xe_names = c("X1","X2","X3","X4","X5"),
+                      Xc_names = c("X1","X2","X3","X4","X5"),
+                      Xt_names = c("X1","X2","X3","X4","X5"),
+                      Z_name = "z",
+                      S_name = "s",
+                      U_name ="U",
+                      delta_name = "delta",
+                      zeta=0.02,
+                      B=50)
+```
+The plot of the bias-corrected PSCE estimation is
+```{r, out.width="90%",dpi=300,fig.width=12, fig.height=7}
+plot.psce(res)
+```
